@@ -417,11 +417,11 @@ const Actions = ({ userId }: { userId: string }) => {
                     />
                     
                     <div className="min-w-0 flex-1">
-                      <p className={`text-sm font-medium leading-tight truncate ${isCompleted ? "line-through" : ""}`}>
+                      <p className={`text-sm font-medium leading-tight ${isCompleted ? "line-through" : ""}`}>
                         {contact.full_name}
                       </p>
                       {contact.username && (
-                        <p className="text-[11px] text-muted-foreground leading-tight truncate">@{contact.username}</p>
+                        <p className="text-[11px] text-muted-foreground leading-tight break-all">@{contact.username}</p>
                       )}
                     </div>
 
@@ -533,12 +533,12 @@ const Actions = ({ userId }: { userId: string }) => {
                       </div>
 
                       <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setExpandedTask(isExpanded ? null : task.id)}>
-                        <p className={`text-sm font-medium leading-tight truncate ${isDone ? "line-through" : ""}`}>
+                        <p className={`text-sm font-medium leading-tight ${isDone ? "line-through" : ""}`}>
                           {name}
                         </p>
                         {handle && (
                           <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="text-[11px] text-muted-foreground leading-tight">@{handle}</span>
+                            <span className="text-[11px] text-muted-foreground leading-tight break-all">@{handle}</span>
                             <span 
                               className="text-[9px] rounded px-1.5 py-[1px] font-medium"
                               style={{ backgroundColor: `${typeCfg.color}18`, color: typeCfg.color }}

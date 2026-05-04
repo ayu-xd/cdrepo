@@ -60,23 +60,9 @@ export default function VariantsEditor({
   const activeVariant = seqVariants.find((v) => v.id === activeVariantId);
 
   return (
-    <div className="rounded-lg border border-border bg-card overflow-hidden">
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors"
-      >
-        <div className="flex items-center gap-2">
-          <MessageSquare className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-semibold">Message Variants</span>
-          <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-            {variants.length} total
-          </span>
-        </div>
-        {open ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-      </button>
-
+    <div className="w-full h-full bg-card">
       {open && sequences.length > 0 && (
-        <div className="border-t border-border flex flex-col md:flex-row h-[450px]">
+        <div className="flex flex-col md:flex-row h-[500px] border border-border rounded-lg overflow-hidden">
           {/* Left Sidebar: Sequences */}
           <div className="w-full md:w-48 border-b md:border-b-0 md:border-r border-border bg-muted/10 flex flex-col shrink-0">
             {sequences.map((seq) => {

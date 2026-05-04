@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import {
   ChevronLeft, Play, Pause, CheckCircle2, AlertCircle, Clock, Send,
   Users, Target, Plus, X, Save, Monitor, MessageSquare, RefreshCw,
-  ChevronDown, ChevronUp, Pencil, Trash2
+  ChevronDown, ChevronUp, Pencil, Trash2, Settings
 } from "lucide-react";
 import VariantsEditor from "@/components/VariantsEditor";
 
@@ -67,10 +67,8 @@ const CampaignDetail = ({ userId }: { userId: string }) => {
   const [campaignAccounts, setCampaignAccounts] = useState<CampaignAccount[]>([]);
   const [allBrowsers, setAllBrowsers] = useState<BrowserInfo[]>([]);
 
-  // Collapsible sections
-  const [openSection, setOpenSection] = useState<string | null>("variants");
-
-  const toggleSection = (s: string) => setOpenSection(prev => prev === s ? null : s);
+  // Tabs
+  const [activeTab, setActiveTab] = useState<"settings" | "targets" | "sequences" | "accounts" | "replies">("sequences");
 
   // ── Load data ─────────────────────────────────────────────────
 
@@ -318,107 +316,135 @@ const CampaignDetail = ({ userId }: { userId: string }) => {
         ))}
       </div>
 
-      {/* ═══════ FOLLOW-UP TOGGLE ═══════ */}
-      <div className="rounded-lg border border-border bg-card p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-semibold">Follow-up (-1A)</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {campaign.followup_enabled
-                ? `Enabled · ${campaign.followup_delay_days} day delay after first DM`
-                : "Disabled — only first DMs will be sent"}
-            </p>
-          </div>
-          <button
-            onClick={toggleFollowup}
-            style={{
-              position: "relative", width: "44px", height: "24px",
-              borderRadius: "999px", border: "none", cursor: "pointer", flexShrink: 0,
-              background: campaign.followup_enabled ? "var(--primary)" : "var(--muted)",
-              transition: "background 0.2s",
-            }}
-          >
-            <span style={{
-              position: "absolute", top: "2px",
-              left: campaign.followup_enabled ? "22px" : "2px",
-              width: "20px", height: "20px",
-              borderRadius: "50%", background: "white",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.18)",
-              transition: "left 0.2s",
-            }} />
-          </button>
-        </div>
-        {campaign.followup_enabled && (
-          <div className="mt-3 flex items-center gap-3">
-            <span className="text-xs text-muted-foreground">Delay:</span>
-            <input
-              type="range" min={1} max={14}
-              value={campaign.followup_delay_days}
-              onChange={e => updateDelay(Number(e.target.value))}
-              className="flex-1 accent-primary"
-            />
-            <span className="text-xs font-semibold w-12 text-center">{campaign.followup_delay_days}d</span>
-          </div>
-        )}
+      {/* Tabs Navigation */}
+      <div className="flex items-center justify-between border-b border-border bg-card overflow-x-auto scrollbar-hide px-2 pt-2">
+        {[
+          { id: "settings", label: "SETTINGS", icon: Settings },
+          { id: "targets", label: "TARGETS", icon: Users },
+          { id: "sequences", label: "SEQUENCES", icon: MessageSquare },
+          { id: "accounts", label: "ACCOUNTS", icon: Monitor },
+          { id: "replies", label: "REPLIES", icon: Send },
+        ].map(tab => {
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`flex flex-col items-center gap-1.5 px-6 py-3 min-w-[100px] border-b-2 transition-colors ${
+                isActive
+                  ? "border-foreground text-foreground font-bold"
+                  : "border-transparent text-muted-foreground hover:text-foreground font-medium"
+              }`}
+            >
+              <tab.icon className="h-5 w-5" />
+              <span className="text-[10px] tracking-widest">{tab.label}</span>
+            </button>
+          );
+        })}
       </div>
 
-      {/* ═══════ MESSAGE VARIANTS — tabbed ═══════ */}
-      <VariantsEditor
-        sequences={sequences}
-        variants={variants}
-        variantEdits={variantEdits}
-        variantsDirty={variantsDirty}
-        saving={saving}
-        open={openSection === "variants"}
-        onToggle={() => toggleSection("variants")}
-        onEdit={editVariant}
-        onSave={saveVariants}
-        onAdd={addVariant}
-        onDelete={deleteVariant}
-        getVariantText={getVariantText}
-      />
-
-      {/* ═══════ TARGET LISTS ═══════ */}
-      <div className="rounded-lg border border-border bg-card overflow-hidden">
-        <button
-          onClick={() => toggleSection("targets")}
-          className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors"
-        >
-          <div className="flex items-center gap-2">
-            <Target className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-semibold">Target Lists</span>
-            <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-              {linkedTargets.length} linked
-            </span>
+      {/* ═══════ SETTINGS TAB ═══════ */}
+      {activeTab === "settings" && (
+        <div className="rounded-lg border border-border bg-card p-6 space-y-6">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-4">Campaign Settings</h2>
+            
+            <div className="rounded-lg border border-border bg-muted/20 p-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground">Follow-up (-1A)</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {campaign.followup_enabled
+                      ? `Enabled · ${campaign.followup_delay_days} day delay after first DM`
+                      : "Disabled — only first DMs will be sent"}
+                  </p>
+                </div>
+                <button
+                  onClick={toggleFollowup}
+                  style={{
+                    position: "relative", width: "44px", height: "24px",
+                    borderRadius: "999px", border: "none", cursor: "pointer", flexShrink: 0,
+                    background: campaign.followup_enabled ? "var(--foreground)" : "var(--muted)",
+                    transition: "background 0.2s",
+                  }}
+                >
+                  <span style={{
+                    position: "absolute", top: "2px",
+                    left: campaign.followup_enabled ? "22px" : "2px",
+                    width: "20px", height: "20px",
+                    borderRadius: "50%", background: "var(--background)",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.18)",
+                    transition: "left 0.2s",
+                  }} />
+                </button>
+              </div>
+              {campaign.followup_enabled && (
+                <div className="mt-4 flex items-center gap-4">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider shrink-0">Delay:</span>
+                  <input
+                    type="range" min={1} max={14}
+                    value={campaign.followup_delay_days}
+                    onChange={e => updateDelay(Number(e.target.value))}
+                    className="flex-1 accent-foreground"
+                  />
+                  <span className="text-sm font-bold w-12 text-center text-foreground">{campaign.followup_delay_days}d</span>
+                </div>
+              )}
+            </div>
           </div>
-          {openSection === "targets" ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-        </button>
+        </div>
+      )}
 
-        {openSection === "targets" && (
-          <div className="px-4 pb-4 space-y-2">
+      {/* ═══════ SEQUENCES TAB ═══════ */}
+      {activeTab === "sequences" && (
+        <VariantsEditor
+          sequences={sequences}
+          variants={variants}
+          variantEdits={variantEdits}
+          variantsDirty={variantsDirty}
+          saving={saving}
+          open={true}
+          onToggle={() => {}}
+          onEdit={editVariant}
+          onSave={saveVariants}
+          onAdd={addVariant}
+          onDelete={deleteVariant}
+          getVariantText={getVariantText}
+        />
+      )}
+
+      {/* ═══════ TARGETS TAB ═══════ */}
+      {activeTab === "targets" && (
+        <div className="rounded-lg border border-border bg-card p-6 space-y-4">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Lists</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">Lists of target users that messages will be sent to.</p>
+          </div>
+          <div className="space-y-2">
             {linkedTargets.map(tlId => {
               const info = allTargetLists.find(t => t.id === tlId);
               return (
-                <div key={tlId} className="flex items-center justify-between rounded-md border border-border bg-muted/20 px-3 py-2">
+                <div key={tlId} className="flex items-center justify-between rounded-md border border-border bg-background px-4 py-3 shadow-sm">
                   <div>
-                    <p className="text-sm font-medium">{info?.name ?? "Unknown list"}</p>
-                    <p className="text-[11px] text-muted-foreground">{info?.count?.toLocaleString() ?? "?"} contacts</p>
+                    <p className="text-sm font-semibold">{info?.name ?? "Unknown list"}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 font-medium">{info?.count?.toLocaleString() ?? "?"} contacts</p>
                   </div>
                   <button
                     onClick={() => removeTargetList(tlId)}
-                    className="rounded-md p-1.5 text-muted-foreground hover:bg-destructive/20 hover:text-destructive transition-colors"
+                    className="rounded-md p-2 text-muted-foreground hover:bg-destructive hover:text-destructive-foreground transition-colors"
                   >
-                    <X className="h-3.5 w-3.5" />
+                    <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
               );
             })}
+            
             {availableTargets.length > 0 && (
-              <div className="pt-1">
+              <div className="pt-2">
                 <select
                   defaultValue=""
                   onChange={e => { if (e.target.value) { addTargetList(e.target.value); e.target.value = ""; } }}
-                  className="w-full rounded-md border border-dashed border-border bg-background px-3 py-2 text-xs text-muted-foreground"
+                  className="w-full rounded-md border-2 border-dashed border-border bg-transparent px-4 py-3 text-sm text-muted-foreground font-medium hover:border-foreground/30 transition-colors focus:outline-none"
                 >
                   <option value="">+ Add target list...</option>
                   {availableTargets.map(tl => (
@@ -427,90 +453,101 @@ const CampaignDetail = ({ userId }: { userId: string }) => {
                 </select>
               </div>
             )}
+            
             {linkedTargets.length === 0 && availableTargets.length === 0 && (
-              <p className="text-xs text-muted-foreground py-2">No target lists available. Create one first.</p>
+              <div className="rounded-md border border-dashed border-border p-8 text-center text-muted-foreground">
+                <Target className="h-8 w-8 mx-auto mb-2 opacity-20" />
+                <p className="text-sm">No target lists available. Create one first.</p>
+              </div>
             )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* ═══════ ACCOUNTS & PACING ═══════ */}
-      <div className="rounded-lg border border-border bg-card overflow-hidden">
-        <button
-          onClick={() => toggleSection("accounts")}
-          className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors"
-        >
-          <div className="flex items-center gap-2">
-            <Monitor className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-semibold">Accounts & Pacing</span>
-            <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-              {campaignAccounts.length} account(s)
-            </span>
+      {/* ═══════ ACCOUNTS TAB ═══════ */}
+      {activeTab === "accounts" && (
+        <div className="rounded-lg border border-border bg-card p-6 space-y-4">
+           <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Accounts & Pacing</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">Set a daily DM limit per account. Start low (5) for new accounts.</p>
           </div>
-          {openSection === "accounts" ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-        </button>
-
-        {openSection === "accounts" && (
-          <div className="px-4 pb-4 space-y-3">
-            <p className="text-[11px] text-muted-foreground">
-              Set a daily DM limit per account. Start low (5) for new accounts and increase gradually.
-            </p>
+          <div className="space-y-3">
             {campaignAccounts.map(acc => {
               const browser = allBrowsers.find(b => b.id === acc.browser_instance_id);
               return (
-                <div key={acc.browser_instance_id} className="rounded-md border border-border bg-muted/20 px-3 py-3 space-y-2">
+                <div key={acc.browser_instance_id} className="rounded-md border border-border bg-background px-4 py-4 space-y-4 shadow-sm">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium">
+                      <p className="text-sm font-semibold">
                         {browser?.ig_username ? `@${browser.ig_username}` : browser?.label ?? "Unknown"}
                       </p>
-                      <p className="text-[11px] text-muted-foreground">{browser?.status ?? "?"}</p>
+                      <span className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-full mt-1 inline-block">{browser?.status ?? "?"}</span>
                     </div>
                     <button
                       onClick={() => removeAccount(acc.browser_instance_id)}
-                      className="rounded-md p-1.5 text-muted-foreground hover:bg-destructive/20 hover:text-destructive transition-colors"
+                      className="rounded-md p-2 text-muted-foreground hover:bg-destructive hover:text-destructive-foreground transition-colors"
                     >
-                      <X className="h-3.5 w-3.5" />
+                      <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-[11px] text-muted-foreground shrink-0">DMs/day:</span>
+                  <div className="flex items-center gap-4 bg-muted/20 p-3 rounded-md">
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider shrink-0">DMs/day:</span>
                     <input
                       type="range" min={1} max={50}
                       value={acc.daily_dm_limit}
                       onChange={e => updatePacing(acc.browser_instance_id, Number(e.target.value))}
-                      className="flex-1 accent-primary"
+                      className="flex-1 accent-foreground"
                     />
                     <input
                       type="number" min={1} max={50}
                       value={acc.daily_dm_limit}
                       onChange={e => updatePacing(acc.browser_instance_id, Math.max(1, Math.min(50, Number(e.target.value))))}
-                      className="w-14 rounded-md border border-border bg-background px-2 py-1 text-xs text-center font-semibold"
+                      className="w-14 rounded-md border border-border bg-background px-2 py-1.5 text-sm text-center font-bold"
                     />
                   </div>
                 </div>
               );
             })}
+            
             {availableBrowsers.length > 0 && (
-              <select
-                defaultValue=""
-                onChange={e => { if (e.target.value) { addAccount(e.target.value); e.target.value = ""; } }}
-                className="w-full rounded-md border border-dashed border-border bg-background px-3 py-2 text-xs text-muted-foreground"
-              >
-                <option value="">+ Add account...</option>
-                {availableBrowsers.map(b => (
-                  <option key={b.id} value={b.id}>
-                    {b.ig_username ? `@${b.ig_username}` : b.label} ({b.status})
-                  </option>
-                ))}
-              </select>
+              <div className="pt-2">
+                <select
+                  defaultValue=""
+                  onChange={e => { if (e.target.value) { addAccount(e.target.value); e.target.value = ""; } }}
+                  className="w-full rounded-md border-2 border-dashed border-border bg-transparent px-4 py-3 text-sm text-muted-foreground font-medium hover:border-foreground/30 transition-colors focus:outline-none"
+                >
+                  <option value="">+ Add account...</option>
+                  {availableBrowsers.map(b => (
+                    <option key={b.id} value={b.id}>
+                      {b.ig_username ? `@${b.ig_username}` : b.label} ({b.status})
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
+            
             {campaignAccounts.length === 0 && availableBrowsers.length === 0 && (
-              <p className="text-xs text-muted-foreground py-2">No browser accounts available. Pair one first.</p>
+              <div className="rounded-md border border-dashed border-border p-8 text-center text-muted-foreground">
+                <Monitor className="h-8 w-8 mx-auto mb-2 opacity-20" />
+                <p className="text-sm">No browser accounts available. Pair one first.</p>
+              </div>
             )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* ═══════ REPLIES TAB ═══════ */}
+      {activeTab === "replies" && (
+        <div className="rounded-lg border border-border bg-card p-10 text-center space-y-3">
+          <MessageSquare className="h-10 w-10 text-muted-foreground/30 mx-auto" />
+          <div>
+            <h2 className="text-base font-semibold">Replies Inbox</h2>
+            <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">
+              This section is under construction. Soon you will be able to see and respond to campaign replies directly from here.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

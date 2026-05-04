@@ -222,6 +222,12 @@ const Actions = ({ userId }: { userId: string }) => {
       setFollowedToday(prev => newStatus === "followed" ? Math.max(0, prev - 1) : prev + 1);
       return; 
     }
+
+    // NEW: If unchecking (reverting to not_started), ensure any pending DM tasks are deleted
+    if (newStatus === "not_started") {
+      await supabase.from("dm_tasks").delete().eq("contact_id", contactId).eq("status", "pending");
+      fetchTasks(); // Refresh DM list to show the removal
+    }
   };
 
   const removeFollowCandidate = async (contactId: string) => {
@@ -254,17 +260,21 @@ const Actions = ({ userId }: { userId: string }) => {
   };
 
   const removeDmTask = async (taskId: string, contactId: string, contactName: string) => {
-    if (!window.confirm(`Delete task for "${contactName}" permanently?`)) return;
+    if (!window.confirm(`Revert "${contactName}" back to the Follow list?`)) return;
+    
     setTasks(prev => prev.filter(t => t.id !== taskId));
+    // Delete the task so it doesn't get processed
     await supabase.from("dm_tasks").delete().eq("id", taskId);
     
-    // Check if we can safely delete the contact
-    const { data: contactData } = await supabase.from("contacts").select("status").eq("id", contactId).single();
-    if (contactData && ["not_started", "followed"].includes(contactData.status)) {
-       await supabase.from("contacts").delete().eq("id", contactId);
-    }
-    toast.success("Task removed");
-    generateDailyTasks(userId, settings.dm_limit, settings.follow_before_dm).then(() => fetchTasks());
+    // Revert the contact back to not_started instead of permanently deleting them
+    await supabase.from("contacts").update({
+      status: "not_started",
+      followed_at: null,
+      assigned_browser_id: null
+    }).eq("id", contactId);
+
+    toast.success("Reverted to Follow list");
+    fetchFollowQueue(); // Refresh Follow list
   };
 
   const completed = tasks.filter(t => t.status === "completed").length;

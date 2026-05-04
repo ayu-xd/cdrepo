@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { ChevronDown, ChevronUp, MessageSquare, Plus, Trash2, Edit2, Save, X } from "lucide-react";
+import { ChevronDown, ChevronUp, MessageSquare, Plus, Trash2, Edit2, Save, X, CheckCircle2 } from "lucide-react";
 
 type SequenceRow = { id: string; step_type: string; step_order: number; delay_days: number };
 type VariantRow = { id: string; sequence_id: string; variant_number: number; message_text: string };
@@ -122,43 +122,39 @@ export default function VariantsEditor({
                     {activeSequence?.step_type === "first_message" ? "First message" : "Follow-up message"}
                   </h3>
                   <div className="flex items-center gap-2">
+                    {variantsDirty && (
+                      <button
+                        onClick={onSave}
+                        disabled={saving}
+                        className="flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-background hover:bg-foreground/90 transition-colors disabled:opacity-50 animate-in fade-in"
+                      >
+                        <Save className="h-3.5 w-3.5" />
+                        {saving ? "Saving..." : "Save Changes"}
+                      </button>
+                    )}
+
                     {isEditing ? (
-                      <>
-                        <button
-                          onClick={() => {
-                            setIsEditing(false);
-                          }}
-                          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
-                        >
-                          <X className="h-3.5 w-3.5" /> Cancel
-                        </button>
-                        <button
-                          onClick={() => {
-                            setIsEditing(false);
-                            onSave();
-                          }}
-                          disabled={saving}
-                          className="flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-background hover:bg-foreground/90 transition-colors disabled:opacity-50"
-                        >
-                          <Save className="h-3.5 w-3.5" />
-                          {saving ? "Saving..." : "Save"}
-                        </button>
-                      </>
+                      <button
+                        onClick={() => setIsEditing(false)}
+                        className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors"
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Done Editing
+                      </button>
                     ) : (
                       <>
                         <button
                           onClick={() => setIsEditing(true)}
                           className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors"
                         >
-                          <Edit2 className="h-3.5 w-3.5" /> Edit Variant
+                          <Edit2 className="h-3.5 w-3.5" /> Edit Text
                         </button>
                         <button
                           onClick={() => {
                             if (activeSequence) onDelete(activeVariant.id, activeSequence.id);
                           }}
-                          className="flex items-center gap-1.5 rounded-md bg-foreground text-background px-3 py-1.5 text-xs font-medium hover:bg-foreground/90 transition-colors"
+                          className="flex items-center gap-1.5 rounded-md text-destructive bg-destructive/10 px-3 py-1.5 text-xs font-medium hover:bg-destructive/20 transition-colors"
                         >
-                          <Trash2 className="h-3.5 w-3.5" /> Delete Variant
+                          <Trash2 className="h-3.5 w-3.5" /> Delete
                         </button>
                       </>
                     )}

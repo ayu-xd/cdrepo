@@ -5,12 +5,23 @@ import { toast } from "sonner";
 import { Save } from "lucide-react";
 import { THEMES, applyTheme, getStoredTheme, type ThemeId } from "@/components/ThemeSwitcher";
 
+const DAY_LABELS = [
+  { value: "0", label: "Su" },
+  { value: "1", label: "Mo" },
+  { value: "2", label: "Tu" },
+  { value: "3", label: "We" },
+  { value: "4", label: "Th" },
+  { value: "5", label: "Fr" },
+  { value: "6", label: "Sa" },
+];
+
 const Settings = ({ userId }: { userId: string }) => {
   const { settings, refreshSettings } = useSettings();
   const [dmLimit, setDmLimit] = useState(settings.dm_limit);
   const [followLimit, setFollowLimit] = useState(settings.follow_limit);
   const [followBeforeDm, setFollowBeforeDm] = useState(settings.follow_before_dm);
   const [flywheelDays, setFlywheelDays] = useState(settings.flywheel_days);
+  const [workingDays, setWorkingDays] = useState<string[]>(settings.working_days);
   const [saving, setSaving] = useState(false);
   const [currentTheme, setCurrentTheme] = useState<ThemeId>(getStoredTheme);
 
@@ -20,11 +31,18 @@ const Settings = ({ userId }: { userId: string }) => {
   };
 
   // Sync state when settings load
+  const toggleDay = (day: string) => {
+    setWorkingDays(prev =>
+      prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
+    );
+  };
+
   useEffect(() => {
     setDmLimit(settings.dm_limit);
     setFollowLimit(settings.follow_limit);
     setFollowBeforeDm(settings.follow_before_dm);
     setFlywheelDays(settings.flywheel_days);
+    setWorkingDays(settings.working_days);
   }, [settings]);
 
   const handleSave = async () => {
@@ -37,6 +55,7 @@ const Settings = ({ userId }: { userId: string }) => {
         follow_limit: followLimit,
         follow_before_dm: followBeforeDm,
         flywheel_days: flywheelDays,
+        working_days: workingDays,
         updated_at: new Date().toISOString(),
       });
 
@@ -81,6 +100,32 @@ const Settings = ({ userId }: { userId: string }) => {
               </span>
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Working Days */}
+      <div className="rounded-lg border border-border bg-card p-5 space-y-3">
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Working Days</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">App is active only on selected days. All other days show as blank.</p>
+        </div>
+        <div className="grid grid-cols-7 gap-1.5">
+          {DAY_LABELS.map((day) => {
+            const isActive = workingDays.includes(day.value);
+            return (
+              <button
+                key={day.value}
+                onClick={() => toggleDay(day.value)}
+                className={`rounded-md py-2 text-xs font-semibold transition-all border ${
+                  isActive
+                    ? "bg-foreground text-background border-foreground"
+                    : "bg-transparent text-muted-foreground border-border hover:border-foreground/40"
+                }`}
+              >
+                {day.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 

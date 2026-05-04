@@ -6,6 +6,7 @@ export interface UserSettings {
   follow_limit: number;
   follow_before_dm: boolean;
   flywheel_days: number;
+  working_days: string[];
 }
 
 export const DEFAULT_SETTINGS: UserSettings = {
@@ -13,6 +14,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   follow_limit: 30,
   follow_before_dm: true,
   flywheel_days: 90,
+  working_days: ["1", "2", "3", "4", "5"],
 };
 
 interface SettingsContextValue {
@@ -45,6 +47,7 @@ export const SettingsProvider = ({
         follow_limit: data.follow_limit ?? DEFAULT_SETTINGS.follow_limit,
         follow_before_dm: data.follow_before_dm ?? DEFAULT_SETTINGS.follow_before_dm,
         flywheel_days: data.flywheel_days ?? DEFAULT_SETTINGS.flywheel_days,
+        working_days: data.working_days ?? DEFAULT_SETTINGS.working_days,
       });
     } else {
       await supabase.from("user_settings").insert({
@@ -53,6 +56,7 @@ export const SettingsProvider = ({
         follow_limit: DEFAULT_SETTINGS.follow_limit,
         follow_before_dm: DEFAULT_SETTINGS.follow_before_dm,
         flywheel_days: DEFAULT_SETTINGS.flywheel_days,
+        working_days: DEFAULT_SETTINGS.working_days,
       });
       setSettings(DEFAULT_SETTINGS);
     }

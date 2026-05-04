@@ -287,11 +287,29 @@ const Actions = ({ userId }: { userId: string }) => {
   const dmPct = tasks.length > 0
     ? Math.min(100, ((completed + failed) / tasks.length) * 100) : 0;
   
-  const sortedFollowCandidates = [...followCandidates].sort((a, b) => {
+   const sortedFollowCandidates = [...followCandidates].sort((a, b) => {
     if (a.status === "followed" && b.status !== "followed") return 1;
     if (a.status !== "followed" && b.status === "followed") return -1;
     return 0;
   });
+
+  const isWorkingDay = settings.working_days.includes(now.getDay().toString());
+
+  if (!isWorkingDay) {
+    return (
+      <div className="flex flex-col h-full w-full items-center justify-center gap-4 px-6 text-center">
+        <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center">
+          <Clock className="h-8 w-8 text-muted-foreground/50" />
+        </div>
+        <h1 className="text-xl font-bold">Rest Day</h1>
+        <p className="text-sm text-muted-foreground max-w-xs">
+          Today is not a working day. No follows or DMs will be sent.
+          You can change this in <span className="font-semibold text-foreground">Settings → Working Days</span>.
+        </p>
+        <p className="text-xs text-muted-foreground">{dateFormatted}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full w-full overflow-y-auto overflow-x-hidden scrollbar-hide pb-24 md:pb-4">

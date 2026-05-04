@@ -312,7 +312,7 @@ const Actions = ({ userId }: { userId: string }) => {
   }
 
   return (
-    <div className="flex flex-col h-full w-full overflow-y-auto overflow-x-hidden scrollbar-hide pb-24 md:pb-4">
+    <div className="h-[calc(100vh-5rem)] md:h-[calc(100vh-2rem)] overflow-y-auto overflow-x-hidden scrollbar-hide pb-4">
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <div>

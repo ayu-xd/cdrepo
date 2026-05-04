@@ -72,10 +72,19 @@ export async function generateDailyTasks(userId: string, dmLimit: number, follow
   const now = new Date();
   const today = now.toISOString().slice(0, 10);
   
-  // Weekend Skip Logic: Do not generate DMs on Saturday (6) or Sunday (0)
-  const dayOfWeek = now.getDay();
-  if (dayOfWeek === 0 || dayOfWeek === 6) {
-    return { generated: 0, message: "Skipping scheduling on weekends" };
+  // Load settings to check configured working days
+  const { data: settings } = await supabase
+    .from("user_settings")
+    .select("working_days")
+    .eq("user_id", userId)
+    .single();
+
+  // "0"=Sun, "1"=Mon, "2"=Tue, "3"=Wed, "4"=Thu, "5"=Fri, "6"=Sat
+  const workingDays = settings?.working_days || ["1", "2", "3", "4", "5"];
+  const dayOfWeek = now.getDay().toString();
+
+  if (!workingDays.includes(dayOfWeek)) {
+    return { generated: 0, message: "Skipping scheduling on non-working days" };
   }
 
   // 1. Get all active campaigns

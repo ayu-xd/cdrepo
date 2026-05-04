@@ -8,6 +8,7 @@ import {
   Users, Target, Plus, X, Save, Monitor, MessageSquare, RefreshCw,
   ChevronDown, ChevronUp, Pencil, Trash2
 } from "lucide-react";
+import VariantsEditor from "@/components/VariantsEditor";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -361,75 +362,21 @@ const CampaignDetail = ({ userId }: { userId: string }) => {
         )}
       </div>
 
-      {/* ═══════ MESSAGE VARIANTS ═══════ */}
-      <div className="rounded-lg border border-border bg-card overflow-hidden">
-        <button
-          onClick={() => toggleSection("variants")}
-          className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors"
-        >
-          <div className="flex items-center gap-2">
-            <MessageSquare className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-semibold">Message Variants</span>
-            <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-              {variants.length} total
-            </span>
-          </div>
-          {openSection === "variants" ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-        </button>
-
-        {openSection === "variants" && (
-          <div className="px-4 pb-4 space-y-4">
-            {sequences.map(seq => {
-              const seqVariants = variants.filter(v => v.sequence_id === seq.id);
-              return (
-                <div key={seq.id} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      {seq.step_type === "first_message" ? "First Message" : "Follow-up (-1A)"}
-                      <span className="ml-1 text-muted-foreground/60">· {seqVariants.length} variants</span>
-                    </p>
-                    <button
-                      onClick={() => addVariant(seq.id)}
-                      className="flex items-center gap-1 text-[10px] text-primary font-medium hover:underline"
-                    >
-                      <Plus className="h-3 w-3" /> Add
-                    </button>
-                  </div>
-                  {seqVariants.map(v => (
-                    <div key={v.id} className="flex gap-2">
-                      <span className="text-[10px] text-muted-foreground font-mono shrink-0 w-5 pt-2 text-right">
-                        {v.variant_number}
-                      </span>
-                      <textarea
-                        value={getVariantText(v)}
-                        onChange={e => editVariant(v.id, e.target.value)}
-                        rows={2}
-                        className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-xs leading-relaxed focus:outline-none focus:ring-1 focus:ring-primary/30 resize-none"
-                      />
-                      <button
-                        onClick={() => deleteVariant(v.id, v.sequence_id)}
-                        className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-destructive/20 hover:text-destructive transition-colors self-start mt-1"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              );
-            })}
-            {variantsDirty && (
-              <button
-                onClick={saveVariants}
-                disabled={saving}
-                className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
-              >
-                <Save className="h-3.5 w-3.5" />
-                {saving ? "Saving..." : "Save Variants"}
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+      {/* ═══════ MESSAGE VARIANTS — tabbed ═══════ */}
+      <VariantsEditor
+        sequences={sequences}
+        variants={variants}
+        variantEdits={variantEdits}
+        variantsDirty={variantsDirty}
+        saving={saving}
+        open={openSection === "variants"}
+        onToggle={() => toggleSection("variants")}
+        onEdit={editVariant}
+        onSave={saveVariants}
+        onAdd={addVariant}
+        onDelete={deleteVariant}
+        getVariantText={getVariantText}
+      />
 
       {/* ═══════ TARGET LISTS ═══════ */}
       <div className="rounded-lg border border-border bg-card overflow-hidden">

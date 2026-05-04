@@ -50,6 +50,7 @@ const CampaignWizard = ({ userId }: { userId: string }) => {
 
   const [browsers, setBrowsers] = useState<BrowserInstance[]>([]);
   const [selectedBrowsers, setSelectedBrowsers] = useState<string[]>([]);
+  const [initialPacing, setInitialPacing] = useState(5);
 
   type PreviewRow = { username: string; full_name: string | null; resolved: string };
   const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
@@ -167,7 +168,7 @@ const CampaignWizard = ({ userId }: { userId: string }) => {
         selectedTargets.map(tlId => ({ campaign_id: campaignId, target_list_id: tlId }))
       );
       await supabase.from("campaign_accounts").insert(
-        selectedBrowsers.map(bId => ({ campaign_id: campaignId, browser_instance_id: bId }))
+        selectedBrowsers.map(bId => ({ campaign_id: campaignId, browser_instance_id: bId, daily_dm_limit: initialPacing }))
       );
 
       for (let i = 0; i < sequenceSteps.length; i++) {
@@ -494,6 +495,32 @@ const CampaignWizard = ({ userId }: { userId: string }) => {
                     </label>
                   );
                 })}
+              </div>
+            )}
+
+            {selectedBrowsers.length > 0 && (
+              <div className="rounded-xl border border-border bg-muted/20 p-5 space-y-3 max-w-2xl">
+                <div>
+                  <p className="text-sm font-semibold">Starting DM limit per account</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    New accounts should start low (5) to avoid flags. You can increase this later inside the campaign.
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range" min={1} max={50}
+                    value={initialPacing}
+                    onChange={e => setInitialPacing(Number(e.target.value))}
+                    className="flex-1 accent-primary"
+                  />
+                  <input
+                    type="number" min={1} max={50}
+                    value={initialPacing}
+                    onChange={e => setInitialPacing(Math.max(1, Math.min(50, Number(e.target.value))))}
+                    className="w-16 rounded-md border border-border bg-background px-2 py-1.5 text-sm text-center font-semibold"
+                  />
+                  <span className="text-xs text-muted-foreground">DMs/day</span>
+                </div>
               </div>
             )}
           </div>

@@ -1,9 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { PageSkeleton } from "@/components/ui/skeleton-shimmer";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ChevronLeft, Play, Pause, CheckCircle2, AlertCircle, Clock, Send, Users, Target } from "lucide-react";
+import {
+  ChevronLeft, Play, Pause, CheckCircle2, AlertCircle, Clock, Send,
+  Users, Target, Plus, X, Save, Monitor, MessageSquare, RefreshCw,
+  ChevronDown, ChevronUp, Pencil, Trash2
+} from "lucide-react";
+
+// ── Types ──────────────────────────────────────────────────────────
 
 type Campaign = {
   id: string;
@@ -17,80 +23,104 @@ type Campaign = {
   created_at: string;
 };
 
-type TaskStat = {
-  status: string;
-  task_type: string;
-  count: number;
+type SequenceRow = { id: string; step_type: string; step_order: number; delay_days: number };
+type VariantRow = { id: string; sequence_id: string; variant_number: number; message_text: string };
+
+type TargetListInfo = { id: string; name: string; count: number };
+type BrowserInfo = { id: string; label: string; ig_username: string | null; status: string };
+
+type CampaignAccount = {
+  id?: string;
+  campaign_id: string;
+  browser_instance_id: string;
+  daily_dm_limit: number;
 };
 
-type Variant = {
-  variant_number: number;
-  message_text: string;
-  step_type: string;
-};
+// ── Component ──────────────────────────────────────────────────────
 
 const CampaignDetail = ({ userId }: { userId: string }) => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [campaign, setCampaign] = useState<Campaign | null>(null);
-  const [taskStats, setTaskStats] = useState<TaskStat[]>([]);
-  const [variants, setVariants] = useState<Variant[]>([]);
-  const [targetCount, setTargetCount] = useState(0);
-  const [accountCount, setAccountCount] = useState(0);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const [campaign, setCampaign] = useState<Campaign | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  // Task stats
+  const [totalTasks, setTotalTasks] = useState(0);
+  const [completed, setCompleted] = useState(0);
+  const [pending, setPending] = useState(0);
+  const [failed, setFailed] = useState(0);
+
+  // Sequences & variants
+  const [sequences, setSequences] = useState<SequenceRow[]>([]);
+  const [variants, setVariants] = useState<VariantRow[]>([]);
+  const [variantEdits, setVariantEdits] = useState<Map<string, string>>(new Map());
+  const [variantsDirty, setVariantsDirty] = useState(false);
+
+  // Target lists
+  const [linkedTargets, setLinkedTargets] = useState<string[]>([]);
+  const [allTargetLists, setAllTargetLists] = useState<TargetListInfo[]>([]);
+
+  // Browser accounts + pacing
+  const [campaignAccounts, setCampaignAccounts] = useState<CampaignAccount[]>([]);
+  const [allBrowsers, setAllBrowsers] = useState<BrowserInfo[]>([]);
+
+  // Collapsible sections
+  const [openSection, setOpenSection] = useState<string | null>("variants");
+
+  const toggleSection = (s: string) => setOpenSection(prev => prev === s ? null : s);
+
+  // ── Load data ─────────────────────────────────────────────────
+
+  const loadData = useCallback(async () => {
     if (!id) return;
-    const load = async () => {
-      const [campRes, tasksRes, seqRes, targetsRes, accountsRes] = await Promise.all([
+
+    const [campRes, tasksRes, seqRes, targetsRes, accountsRes, allTargetsRes, allBrowsersRes] =
+      await Promise.all([
         supabase.from("campaigns").select("*").eq("id", id).single(),
         supabase.from("dm_tasks").select("status, task_type").eq("campaign_id", id),
-        supabase.from("sequences").select("id, step_type").eq("campaign_id", id),
+        supabase.from("sequences").select("id, step_type, step_order, delay_days").eq("campaign_id", id).order("step_order"),
         supabase.from("campaign_targets").select("target_list_id").eq("campaign_id", id),
-        supabase.from("campaign_accounts").select("browser_instance_id").eq("campaign_id", id),
+        supabase.from("campaign_accounts").select("*").eq("campaign_id", id),
+        supabase.from("target_lists").select("id, name, count").eq("user_id", userId).order("created_at", { ascending: false }),
+        supabase.from("browser_instances").select("id, label, ig_username, status").eq("user_id", userId),
       ]);
 
-      setCampaign(campRes.data as Campaign);
-      setTargetCount(targetsRes.data?.length ?? 0);
-      setAccountCount(accountsRes.data?.length ?? 0);
+    setCampaign(campRes.data as Campaign);
 
-      // Aggregate task stats
-      const tasks = tasksRes.data ?? [];
-      const statMap = new Map<string, number>();
-      tasks.forEach(t => {
-        const key = `${t.status}:${t.task_type}`;
-        statMap.set(key, (statMap.get(key) || 0) + 1);
-      });
-      setTaskStats(
-        Array.from(statMap.entries()).map(([key, count]) => {
-          const [status, task_type] = key.split(":");
-          return { status, task_type, count };
-        })
-      );
+    const tasks = tasksRes.data ?? [];
+    setTotalTasks(tasks.length);
+    setCompleted(tasks.filter(t => t.status === "completed").length);
+    setPending(tasks.filter(t => t.status === "pending").length);
+    setFailed(tasks.filter(t => t.status === "failed").length);
 
-      // Load variants
-      const seqIds = (seqRes.data ?? []).map(s => s.id);
-      if (seqIds.length) {
-        const { data: vars } = await supabase
-          .from("sequence_variants")
-          .select("variant_number, message_text, sequence_id")
-          .in("sequence_id", seqIds)
-          .order("variant_number");
+    const seqs = (seqRes.data ?? []) as SequenceRow[];
+    setSequences(seqs);
 
-        const seqTypeMap = new Map((seqRes.data ?? []).map(s => [s.id, s.step_type]));
-        setVariants(
-          (vars ?? []).map(v => ({
-            variant_number: v.variant_number,
-            message_text: v.message_text,
-            step_type: seqTypeMap.get(v.sequence_id) || "first_message",
-          }))
-        );
-      }
+    const seqIds = seqs.map(s => s.id);
+    if (seqIds.length) {
+      const { data: vars } = await supabase
+        .from("sequence_variants")
+        .select("id, sequence_id, variant_number, message_text")
+        .in("sequence_id", seqIds)
+        .order("variant_number");
+      setVariants((vars ?? []) as VariantRow[]);
+    }
 
-      setLoading(false);
-    };
-    load();
-  }, [id]);
+    setLinkedTargets((targetsRes.data ?? []).map(t => t.target_list_id));
+    setCampaignAccounts((accountsRes.data ?? []) as CampaignAccount[]);
+    setAllTargetLists((allTargetsRes.data ?? []) as TargetListInfo[]);
+    setAllBrowsers((allBrowsersRes.data ?? []) as BrowserInfo[]);
+
+    setVariantEdits(new Map());
+    setVariantsDirty(false);
+    setLoading(false);
+  }, [id, userId]);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  // ── Campaign actions ──────────────────────────────────────────
 
   const toggleStatus = async () => {
     if (!campaign) return;
@@ -106,21 +136,135 @@ const CampaignDetail = ({ userId }: { userId: string }) => {
     }
   };
 
-  const totalTasks = taskStats.reduce((acc, s) => acc + s.count, 0);
-  const completed = taskStats.filter(s => s.status === "completed").reduce((acc, s) => acc + s.count, 0);
-  const failed = taskStats.filter(s => s.status === "failed").reduce((acc, s) => acc + s.count, 0);
-  const pending = taskStats.filter(s => s.status === "pending").reduce((acc, s) => acc + s.count, 0);
+  const toggleFollowup = async () => {
+    if (!campaign) return;
+    const newVal = !campaign.followup_enabled;
+    const { error } = await supabase
+      .from("campaigns")
+      .update({ followup_enabled: newVal, updated_at: new Date().toISOString() })
+      .eq("id", campaign.id);
+    if (error) toast.error(error.message);
+    else {
+      toast.success(newVal ? "Follow-up enabled" : "Follow-up disabled");
+      setCampaign({ ...campaign, followup_enabled: newVal });
+    }
+  };
 
-  if (loading) {
-    return <PageSkeleton />;
-  }
+  const updateDelay = async (days: number) => {
+    if (!campaign) return;
+    await supabase.from("campaigns")
+      .update({ followup_delay_days: days, updated_at: new Date().toISOString() })
+      .eq("id", campaign.id);
+    setCampaign({ ...campaign, followup_delay_days: days });
+  };
 
-  if (!campaign) {
-    return <div className="text-center py-20 text-muted-foreground">Campaign not found</div>;
-  }
+  // ── Variant actions ───────────────────────────────────────────
+
+  const editVariant = (variantId: string, text: string) => {
+    setVariantEdits(prev => new Map(prev).set(variantId, text));
+    setVariantsDirty(true);
+  };
+
+  const getVariantText = (v: VariantRow) => {
+    return variantEdits.has(v.id) ? variantEdits.get(v.id)! : v.message_text;
+  };
+
+  const saveVariants = async () => {
+    setSaving(true);
+    for (const [varId, text] of variantEdits.entries()) {
+      await supabase.from("sequence_variants").update({ message_text: text }).eq("id", varId);
+    }
+    toast.success("Variants saved");
+    setVariantsDirty(false);
+    setVariantEdits(new Map());
+    await loadData();
+    setSaving(false);
+  };
+
+  const addVariant = async (sequenceId: string) => {
+    const seqVariants = variants.filter(v => v.sequence_id === sequenceId);
+    const nextNum = seqVariants.length + 1;
+    const { error } = await supabase.from("sequence_variants").insert({
+      sequence_id: sequenceId,
+      variant_number: nextNum,
+      message_text: "",
+    });
+    if (error) toast.error(error.message);
+    else { toast.success("Variant added"); loadData(); }
+  };
+
+  const deleteVariant = async (variantId: string, sequenceId: string) => {
+    const seqVariants = variants.filter(v => v.sequence_id === sequenceId);
+    if (seqVariants.length <= 1) { toast.error("Need at least 1 variant"); return; }
+    if (!window.confirm("Delete this variant?")) return;
+    await supabase.from("sequence_variants").delete().eq("id", variantId);
+    toast.success("Variant deleted");
+    loadData();
+  };
+
+  // ── Target list actions ───────────────────────────────────────
+
+  const addTargetList = async (listId: string) => {
+    if (!id) return;
+    const { error } = await supabase.from("campaign_targets").insert({
+      campaign_id: id,
+      target_list_id: listId,
+    });
+    if (error) toast.error(error.message);
+    else { toast.success("Target list added"); loadData(); }
+  };
+
+  const removeTargetList = async (listId: string) => {
+    if (!id) return;
+    if (!window.confirm("Remove this target list from the campaign?")) return;
+    await supabase.from("campaign_targets").delete()
+      .eq("campaign_id", id).eq("target_list_id", listId);
+    toast.success("Target list removed");
+    loadData();
+  };
+
+  // ── Account actions ───────────────────────────────────────────
+
+  const addAccount = async (browserId: string) => {
+    if (!id) return;
+    const { error } = await supabase.from("campaign_accounts").insert({
+      campaign_id: id,
+      browser_instance_id: browserId,
+      daily_dm_limit: 5,
+    });
+    if (error) toast.error(error.message);
+    else { toast.success("Account added (5 DMs/day default)"); loadData(); }
+  };
+
+  const removeAccount = async (browserId: string) => {
+    if (!id) return;
+    if (!window.confirm("Remove this account from the campaign?")) return;
+    await supabase.from("campaign_accounts").delete()
+      .eq("campaign_id", id).eq("browser_instance_id", browserId);
+    toast.success("Account removed");
+    loadData();
+  };
+
+  const updatePacing = async (browserId: string, limit: number) => {
+    if (!id) return;
+    setCampaignAccounts(prev =>
+      prev.map(a => a.browser_instance_id === browserId ? { ...a, daily_dm_limit: limit } : a)
+    );
+    await supabase.from("campaign_accounts").update({ daily_dm_limit: limit })
+      .eq("campaign_id", id).eq("browser_instance_id", browserId);
+  };
+
+  // ── Render ────────────────────────────────────────────────────
+
+  if (loading) return <PageSkeleton />;
+  if (!campaign) return <div className="text-center py-20 text-muted-foreground">Campaign not found</div>;
+
+  const linkedBrowserIds = new Set(campaignAccounts.map(a => a.browser_instance_id));
+  const availableBrowsers = allBrowsers.filter(b => !linkedBrowserIds.has(b.id));
+  const availableTargets = allTargetLists.filter(tl => !linkedTargets.includes(tl.id));
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="max-w-3xl space-y-5 pb-16">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
@@ -158,83 +302,267 @@ const CampaignDetail = ({ userId }: { userId: string }) => {
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="rounded-lg border border-border bg-card p-3">
-          <div className="flex items-center gap-1.5 text-muted-foreground mb-1">
-            <Send className="h-3 w-3" /><span className="text-[10px]">Total Tasks</span>
-          </div>
-          <p className="text-xl font-bold">{totalTasks}</p>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-3">
-          <div className="flex items-center gap-1.5 text-emerald-500 mb-1">
-            <CheckCircle2 className="h-3 w-3" /><span className="text-[10px]">Completed</span>
-          </div>
-          <p className="text-xl font-bold text-emerald-500">{completed}</p>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-3">
-          <div className="flex items-center gap-1.5 text-amber-500 mb-1">
-            <Clock className="h-3 w-3" /><span className="text-[10px]">Pending</span>
-          </div>
-          <p className="text-xl font-bold text-amber-500">{pending}</p>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-3">
-          <div className="flex items-center gap-1.5 text-destructive mb-1">
-            <AlertCircle className="h-3 w-3" /><span className="text-[10px]">Failed</span>
-          </div>
-          <p className="text-xl font-bold text-destructive">{failed}</p>
-        </div>
-      </div>
-
-      {/* Config overview */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="rounded-lg border border-border bg-muted/30 p-3">
-          <div className="flex items-center gap-1.5 mb-1">
-            <Target className="h-3 w-3 text-muted-foreground" />
-            <span className="text-[10px] text-muted-foreground font-medium">Target Lists</span>
-          </div>
-          <p className="text-sm font-semibold">{targetCount} list(s)</p>
-        </div>
-        <div className="rounded-lg border border-border bg-muted/30 p-3">
-          <div className="flex items-center gap-1.5 mb-1">
-            <Users className="h-3 w-3 text-muted-foreground" />
-            <span className="text-[10px] text-muted-foreground font-medium">Accounts</span>
-          </div>
-          <p className="text-sm font-semibold">{accountCount} browser(s)</p>
-        </div>
-        <div className="rounded-lg border border-border bg-muted/30 p-3">
-          <span className="text-[10px] text-muted-foreground font-medium">Follow-up -1A</span>
-          <p className="text-sm font-semibold">
-            {campaign.followup_enabled
-              ? `Enabled · ${campaign.followup_delay_days}d delay`
-              : "Disabled"}
-          </p>
-        </div>
-      </div>
-
-      {/* Variants */}
-      <div className="space-y-3">
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Message Variants</h2>
-        {["first_message", "followup_1a"].map(stepType => {
-          const stepVariants = variants.filter(v => v.step_type === stepType);
-          if (!stepVariants.length) return null;
-          return (
-            <div key={stepType} className="space-y-2">
-              <p className="text-xs font-medium">
-                {stepType === "first_message" ? "First Message" : "Follow-up (-1A)"}
-                <span className="text-muted-foreground ml-1">· {stepVariants.length} variants</span>
-              </p>
-              <div className="space-y-1.5">
-                {stepVariants.map(v => (
-                  <div key={v.variant_number} className="flex gap-2 rounded-md bg-muted/40 p-2.5">
-                    <span className="text-[10px] text-muted-foreground font-mono shrink-0 w-4 pt-0.5">
-                      {v.variant_number}
-                    </span>
-                    <p className="text-xs leading-relaxed">{v.message_text}</p>
-                  </div>
-                ))}
-              </div>
+        {[
+          { label: "Total Tasks", value: totalTasks, icon: Send, color: "text-muted-foreground" },
+          { label: "Completed", value: completed, icon: CheckCircle2, color: "text-emerald-500" },
+          { label: "Pending", value: pending, icon: Clock, color: "text-amber-500" },
+          { label: "Failed", value: failed, icon: AlertCircle, color: "text-destructive" },
+        ].map(s => (
+          <div key={s.label} className="rounded-lg border border-border bg-card p-3">
+            <div className={`flex items-center gap-1.5 ${s.color} mb-1`}>
+              <s.icon className="h-3 w-3" /><span className="text-[10px]">{s.label}</span>
             </div>
-          );
-        })}
+            <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* ═══════ FOLLOW-UP TOGGLE ═══════ */}
+      <div className="rounded-lg border border-border bg-card p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold">Follow-up (-1A)</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {campaign.followup_enabled
+                ? `Enabled · ${campaign.followup_delay_days} day delay after first DM`
+                : "Disabled — only first DMs will be sent"}
+            </p>
+          </div>
+          <button
+            onClick={toggleFollowup}
+            style={{
+              position: "relative", width: "44px", height: "24px",
+              borderRadius: "999px", border: "none", cursor: "pointer", flexShrink: 0,
+              background: campaign.followup_enabled ? "var(--primary)" : "var(--muted)",
+              transition: "background 0.2s",
+            }}
+          >
+            <span style={{
+              position: "absolute", top: "2px",
+              left: campaign.followup_enabled ? "22px" : "2px",
+              width: "20px", height: "20px",
+              borderRadius: "50%", background: "white",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.18)",
+              transition: "left 0.2s",
+            }} />
+          </button>
+        </div>
+        {campaign.followup_enabled && (
+          <div className="mt-3 flex items-center gap-3">
+            <span className="text-xs text-muted-foreground">Delay:</span>
+            <input
+              type="range" min={1} max={14}
+              value={campaign.followup_delay_days}
+              onChange={e => updateDelay(Number(e.target.value))}
+              className="flex-1 accent-primary"
+            />
+            <span className="text-xs font-semibold w-12 text-center">{campaign.followup_delay_days}d</span>
+          </div>
+        )}
+      </div>
+
+      {/* ═══════ MESSAGE VARIANTS ═══════ */}
+      <div className="rounded-lg border border-border bg-card overflow-hidden">
+        <button
+          onClick={() => toggleSection("variants")}
+          className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <MessageSquare className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-semibold">Message Variants</span>
+            <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+              {variants.length} total
+            </span>
+          </div>
+          {openSection === "variants" ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+        </button>
+
+        {openSection === "variants" && (
+          <div className="px-4 pb-4 space-y-4">
+            {sequences.map(seq => {
+              const seqVariants = variants.filter(v => v.sequence_id === seq.id);
+              return (
+                <div key={seq.id} className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      {seq.step_type === "first_message" ? "First Message" : "Follow-up (-1A)"}
+                      <span className="ml-1 text-muted-foreground/60">· {seqVariants.length} variants</span>
+                    </p>
+                    <button
+                      onClick={() => addVariant(seq.id)}
+                      className="flex items-center gap-1 text-[10px] text-primary font-medium hover:underline"
+                    >
+                      <Plus className="h-3 w-3" /> Add
+                    </button>
+                  </div>
+                  {seqVariants.map(v => (
+                    <div key={v.id} className="flex gap-2">
+                      <span className="text-[10px] text-muted-foreground font-mono shrink-0 w-5 pt-2 text-right">
+                        {v.variant_number}
+                      </span>
+                      <textarea
+                        value={getVariantText(v)}
+                        onChange={e => editVariant(v.id, e.target.value)}
+                        rows={2}
+                        className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-xs leading-relaxed focus:outline-none focus:ring-1 focus:ring-primary/30 resize-none"
+                      />
+                      <button
+                        onClick={() => deleteVariant(v.id, v.sequence_id)}
+                        className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-destructive/20 hover:text-destructive transition-colors self-start mt-1"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+            {variantsDirty && (
+              <button
+                onClick={saveVariants}
+                disabled={saving}
+                className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+              >
+                <Save className="h-3.5 w-3.5" />
+                {saving ? "Saving..." : "Save Variants"}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ═══════ TARGET LISTS ═══════ */}
+      <div className="rounded-lg border border-border bg-card overflow-hidden">
+        <button
+          onClick={() => toggleSection("targets")}
+          className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <Target className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-semibold">Target Lists</span>
+            <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+              {linkedTargets.length} linked
+            </span>
+          </div>
+          {openSection === "targets" ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+        </button>
+
+        {openSection === "targets" && (
+          <div className="px-4 pb-4 space-y-2">
+            {linkedTargets.map(tlId => {
+              const info = allTargetLists.find(t => t.id === tlId);
+              return (
+                <div key={tlId} className="flex items-center justify-between rounded-md border border-border bg-muted/20 px-3 py-2">
+                  <div>
+                    <p className="text-sm font-medium">{info?.name ?? "Unknown list"}</p>
+                    <p className="text-[11px] text-muted-foreground">{info?.count?.toLocaleString() ?? "?"} contacts</p>
+                  </div>
+                  <button
+                    onClick={() => removeTargetList(tlId)}
+                    className="rounded-md p-1.5 text-muted-foreground hover:bg-destructive/20 hover:text-destructive transition-colors"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              );
+            })}
+            {availableTargets.length > 0 && (
+              <div className="pt-1">
+                <select
+                  defaultValue=""
+                  onChange={e => { if (e.target.value) { addTargetList(e.target.value); e.target.value = ""; } }}
+                  className="w-full rounded-md border border-dashed border-border bg-background px-3 py-2 text-xs text-muted-foreground"
+                >
+                  <option value="">+ Add target list...</option>
+                  {availableTargets.map(tl => (
+                    <option key={tl.id} value={tl.id}>{tl.name} ({tl.count} contacts)</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {linkedTargets.length === 0 && availableTargets.length === 0 && (
+              <p className="text-xs text-muted-foreground py-2">No target lists available. Create one first.</p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ═══════ ACCOUNTS & PACING ═══════ */}
+      <div className="rounded-lg border border-border bg-card overflow-hidden">
+        <button
+          onClick={() => toggleSection("accounts")}
+          className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <Monitor className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-semibold">Accounts & Pacing</span>
+            <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+              {campaignAccounts.length} account(s)
+            </span>
+          </div>
+          {openSection === "accounts" ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+        </button>
+
+        {openSection === "accounts" && (
+          <div className="px-4 pb-4 space-y-3">
+            <p className="text-[11px] text-muted-foreground">
+              Set a daily DM limit per account. Start low (5) for new accounts and increase gradually.
+            </p>
+            {campaignAccounts.map(acc => {
+              const browser = allBrowsers.find(b => b.id === acc.browser_instance_id);
+              return (
+                <div key={acc.browser_instance_id} className="rounded-md border border-border bg-muted/20 px-3 py-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">
+                        {browser?.ig_username ? `@${browser.ig_username}` : browser?.label ?? "Unknown"}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">{browser?.status ?? "?"}</p>
+                    </div>
+                    <button
+                      onClick={() => removeAccount(acc.browser_instance_id)}
+                      className="rounded-md p-1.5 text-muted-foreground hover:bg-destructive/20 hover:text-destructive transition-colors"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-[11px] text-muted-foreground shrink-0">DMs/day:</span>
+                    <input
+                      type="range" min={1} max={50}
+                      value={acc.daily_dm_limit}
+                      onChange={e => updatePacing(acc.browser_instance_id, Number(e.target.value))}
+                      className="flex-1 accent-primary"
+                    />
+                    <input
+                      type="number" min={1} max={50}
+                      value={acc.daily_dm_limit}
+                      onChange={e => updatePacing(acc.browser_instance_id, Math.max(1, Math.min(50, Number(e.target.value))))}
+                      className="w-14 rounded-md border border-border bg-background px-2 py-1 text-xs text-center font-semibold"
+                    />
+                  </div>
+                </div>
+              );
+            })}
+            {availableBrowsers.length > 0 && (
+              <select
+                defaultValue=""
+                onChange={e => { if (e.target.value) { addAccount(e.target.value); e.target.value = ""; } }}
+                className="w-full rounded-md border border-dashed border-border bg-background px-3 py-2 text-xs text-muted-foreground"
+              >
+                <option value="">+ Add account...</option>
+                {availableBrowsers.map(b => (
+                  <option key={b.id} value={b.id}>
+                    {b.ig_username ? `@${b.ig_username}` : b.label} ({b.status})
+                  </option>
+                ))}
+              </select>
+            )}
+            {campaignAccounts.length === 0 && availableBrowsers.length === 0 && (
+              <p className="text-xs text-muted-foreground py-2">No browser accounts available. Pair one first.</p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

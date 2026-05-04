@@ -111,11 +111,17 @@ export async function generateDailyTasks(userId: string, dmLimit: number, follow
 
   const { data: assignments } = await supabase
     .from("campaign_accounts")
-    .select("campaign_id, browser_instance_id")
+    .select("campaign_id, browser_instance_id, daily_dm_limit")
     .in("campaign_id", campaignIds)
     .in("browser_instance_id", browserIds);
 
   if (!assignments?.length) return { generated: 0, message: "No accounts assigned to campaigns" };
+
+  // Build a pacing lookup: "campaignId:browserId" → daily_dm_limit
+  const pacingMap = new Map<string, number>();
+  assignments.forEach(a => {
+    pacingMap.set(`${a.campaign_id}:${a.browser_instance_id}`, a.daily_dm_limit ?? dmLimit);
+  });
 
   // 4. Get existing tasks for today (to avoid duplicates)
   const { data: existingTasks } = await supabase
@@ -229,10 +235,8 @@ export async function generateDailyTasks(userId: string, dmLimit: number, follow
     if (!browserCampaigns.length) continue;
 
     const existingCount = existingCountByBrowser.get(browser.id) || 0;
-    const remaining = dmLimit - existingCount;
-    if (remaining <= 0) continue;
-
-    const perCampaignQuota = Math.max(1, Math.floor(remaining / browserCampaigns.length));
+    const globalRemaining = dmLimit - existingCount;
+    if (globalRemaining <= 0) continue;
 
     for (const campaign of browserCampaigns) {
       const seqs = seqMap.get(campaign.id) || [];
@@ -242,6 +246,10 @@ export async function generateDailyTasks(userId: string, dmLimit: number, follow
       if (!firstMsgSeq?.variants.length) continue;
 
       const contactIds = campaignContactIds.get(campaign.id) || [];
+
+      // Per-campaign pacing: use the MINIMUM of global remaining and campaign-specific limit
+      const campaignPacingLimit = pacingMap.get(`${campaign.id}:${browser.id}`) ?? dmLimit;
+      const perCampaignQuota = Math.max(1, Math.min(globalRemaining, campaignPacingLimit));
 
       // Calculate slots
       let followupSlots = 0;

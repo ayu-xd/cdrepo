@@ -191,7 +191,18 @@ const Actions = ({ userId }: { userId: string }) => {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  const refresh = () => { setLoading(true); setFollowLoading(true); fetchTasks(); fetchFollowQueue(); };
+  const refresh = async () => {
+    setLoading(true);
+    setFollowLoading(true);
+    try {
+      const result = await generateDailyTasks(userId, settings.dm_limit, settings.follow_before_dm);
+      if (result.message) toast.success(result.message);
+    } catch (e) {
+      // ignore generation errors, still refresh the list
+    }
+    await fetchTasks();
+    await fetchFollowQueue();
+  };
 
   // --- ACTIONS FOR REMOVAL / SKIPPING / TOGGLING ---
   const toggleFollow = async (contactId: string, currentStatus: string) => {

@@ -123,10 +123,10 @@ export async function generateDailyTasks(userId: string, dmLimit: number, follow
     pacingMap.set(`${a.campaign_id}:${a.browser_instance_id}`, a.daily_dm_limit ?? dmLimit);
   });
 
-  // 4. Get existing tasks for today (to avoid duplicates)
+  // 4. Get existing tasks for today (to avoid duplicates and update pending)
   const { data: existingTasks } = await supabase
     .from("dm_tasks")
-    .select("contact_id, browser_instance_id")
+    .select("id, contact_id, browser_instance_id, status, task_type, variant_number, message_text, campaign_id")
     .eq("user_id", userId)
     .eq("scheduled_date", today)
     .in("status", ["pending", "claimed", "processing", "completed"]);
@@ -206,6 +206,10 @@ export async function generateDailyTasks(userId: string, dmLimit: number, follow
     });
   }
 
+  // Include any contacts that already have tasks today to ensure we can update their pending variants
+  const existingTaskContactIds = (existingTasks || []).map(t => t.contact_id);
+  allContactIds = [...new Set([...allContactIds, ...existingTaskContactIds])];
+
   // 7. Load all relevant contacts in bulk
   const contactMap = new Map<string, Contact>();
   if (allContactIds.length) {
@@ -219,6 +223,33 @@ export async function generateDailyTasks(userId: string, dmLimit: number, follow
         .select("id, username, full_name, status, dmed_at, followed_at, followup_1a_sent, assigned_browser_id")
         .in("id", batch);
       (data || []).forEach(c => contactMap.set(c.id, c as Contact));
+    }
+  }
+
+  // 7.5 Synchronize pending tasks with latest message variants
+  const pendingTasks = (existingTasks || []).filter(t => t.status === "pending");
+  let updatedPendingCount = 0;
+
+  for (const t of pendingTasks) {
+    if (!t.campaign_id || !t.task_type || !t.variant_number) continue;
+    
+    const seqs = seqMap.get(t.campaign_id) || [];
+    // task_type in dm_tasks differs from step_type in sequences
+    const stepTypeMap: Record<string, string> = { first_dm: "first_message", followup_1a: "followup_1a" };
+    const mappedStepType = stepTypeMap[t.task_type] ?? t.task_type;
+    const seq = seqs.find(s => s.step_type === mappedStepType);
+    if (!seq) continue;
+    
+    const variant = seq.variants.find(v => v.variant_number === t.variant_number);
+    if (!variant) continue;
+    
+    const contact = contactMap.get(t.contact_id);
+    if (!contact) continue;
+    
+    const resolved = applyVariables(variant.message_text, contact);
+    if (resolved !== t.message_text) {
+      await supabase.from("dm_tasks").update({ message_text: resolved }).eq("id", t.id);
+      updatedPendingCount++;
     }
   }
 
@@ -365,7 +396,7 @@ export async function generateDailyTasks(userId: string, dmLimit: number, follow
 
   return {
     generated: totalGenerated,
-    message: `Generated ${totalGenerated} tasks for today`,
+    message: `Generated ${totalGenerated} tasks for today${updatedPendingCount > 0 ? ` (Updated ${updatedPendingCount} pending tasks)` : ''}`,
   };
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { PageSkeleton } from "@/components/ui/skeleton-shimmer";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -244,13 +244,25 @@ const CampaignDetail = ({ userId }: { userId: string }) => {
     loadData();
   };
 
-  const updatePacing = async (browserId: string, limit: number) => {
+  const pacingTimerRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  const updatePacing = (browserId: string, limit: number) => {
     if (!id) return;
+    // Instant local update so slider feels responsive
     setCampaignAccounts(prev =>
       prev.map(a => a.browser_instance_id === browserId ? { ...a, daily_dm_limit: limit } : a)
     );
-    await supabase.from("campaign_accounts").update({ daily_dm_limit: limit })
-      .eq("campaign_id", id).eq("browser_instance_id", browserId);
+    // Debounce the DB write — only the last value within 500ms gets saved
+    if (pacingTimerRef.current[browserId]) clearTimeout(pacingTimerRef.current[browserId]);
+    pacingTimerRef.current[browserId] = setTimeout(async () => {
+      const { error } = await supabase.from("campaign_accounts").update({ daily_dm_limit: limit })
+        .eq("campaign_id", id).eq("browser_instance_id", browserId);
+      if (error) {
+        toast.error(`Failed to save pacing: ${error.message}`);
+      } else {
+        toast.success(`DMs/day updated to ${limit}`);
+      }
+    }, 500);
   };
 
   // ── Render ────────────────────────────────────────────────────

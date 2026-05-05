@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { 
   RefreshCw, Check, ExternalLink, AlertCircle, 
   ChevronDown, ChevronUp, Zap, MessageCircle, 
-  UserPlus, CheckCircle2, Clock, Loader2, XCircle, X
+  UserPlus, CheckCircle2, Clock, Loader2, XCircle, X, Copy
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";

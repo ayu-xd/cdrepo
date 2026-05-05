@@ -288,6 +288,18 @@ const Actions = ({ userId }: { userId: string }) => {
     fetchFollowQueue(); // Refresh Follow list
   };
 
+  const markManuallyDmed = async (taskId: string, contactId: string) => {
+    // Optimistic Update
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: "completed" } : t));
+    
+    // Update task
+    await supabase.from("dm_tasks").update({ status: "completed", completed_at: new Date().toISOString() }).eq("id", taskId);
+    // Update contact
+    await supabase.from("contacts").update({ status: "dmed", dmed_at: new Date().toISOString() }).eq("id", contactId);
+    
+    toast.success("Marked as manually DM'd");
+  };
+
   const completed = tasks.filter(t => t.status === "completed").length;
   const pending = tasks.filter(t => t.status === "pending").length;
   const failed = tasks.filter(t => t.status === "failed").length;
@@ -597,10 +609,30 @@ const Actions = ({ userId }: { userId: string }) => {
                             <span className="flex items-center gap-1 font-semibold mb-1">
                               <AlertCircle className="h-3 w-3" /> Error
                             </span>
-                            <span className="block mb-1">{task.error_reason}</span>
+                            <span className="block mb-2">{task.error_reason}</span>
                             {task.unreachable_type && (
-                              <span className="opacity-70 text-[10px]">Type: {task.unreachable_type}</span>
+                              <span className="opacity-70 text-[10px] block mb-2">Type: {task.unreachable_type}</span>
                             )}
+                            
+                            <div className="bg-background/50 rounded p-2 mb-2 border border-destructive/20">
+                              <span className="text-destructive/80 font-medium block mb-1">Message to send:</span>
+                              <div className="select-all text-foreground whitespace-pre-wrap">{task.message_text}</div>
+                            </div>
+                            
+                            <div className="flex items-center gap-2">
+                              <button 
+                                onClick={() => { navigator.clipboard.writeText(task.message_text); toast.success("Message copied!"); }}
+                                className="flex items-center gap-1.5 rounded-md bg-secondary px-2.5 py-1.5 font-medium hover:bg-secondary/80 text-secondary-foreground transition-colors"
+                              >
+                                <Copy className="h-3 w-3" /> Copy Opener
+                              </button>
+                              <button 
+                                onClick={() => markManuallyDmed(task.id, task.contact_id)}
+                                className="flex items-center gap-1.5 rounded-md bg-emerald-500/15 text-emerald-600 px-2.5 py-1.5 font-medium hover:bg-emerald-500/25 transition-colors"
+                              >
+                                <CheckCircle2 className="h-3 w-3" /> Mark as Manually DM'd
+                              </button>
+                            </div>
                           </>
                         ) : (
                           <>

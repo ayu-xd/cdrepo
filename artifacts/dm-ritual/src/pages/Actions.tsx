@@ -58,6 +58,8 @@ const Actions = ({ userId }: { userId: string }) => {
   const [browsers, setBrowsers] = useState<Map<string, BrowserInfo>>(new Map());
   const [loading, setLoading] = useState(true);
   const [expandedTask, setExpandedTask] = useState<string | null>(null);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState("");
 
   const [followCandidates, setFollowCandidates] = useState<ContactInfo[]>([]);
   const [followLoading, setFollowLoading] = useState(true);
@@ -286,6 +288,17 @@ const Actions = ({ userId }: { userId: string }) => {
 
     toast.success("Reverted to Follow list");
     fetchFollowQueue(); // Refresh Follow list
+  };
+
+  const updateTaskMessage = async (taskId: string) => {
+    if (!editingText.trim() || editingText === tasks.find(t => t.id === taskId)?.message_text) {
+      setEditingTaskId(null);
+      return;
+    }
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, message_text: editingText } : t));
+    await supabase.from("dm_tasks").update({ message_text: editingText }).eq("id", taskId);
+    setEditingTaskId(null);
+    toast.success("Message updated");
   };
 
   const markManuallyDmed = async (taskId: string, contactId: string) => {
@@ -615,8 +628,34 @@ const Actions = ({ userId }: { userId: string }) => {
                             )}
                             
                             <div className="bg-background/50 rounded p-2 mb-2 border border-destructive/20">
-                              <span className="text-destructive/80 font-medium block mb-1">Message to send:</span>
-                              <div className="select-all text-foreground whitespace-pre-wrap">{task.message_text}</div>
+                              <span className="text-destructive/80 font-medium block mb-1 flex items-center justify-between">
+                                <span>Message to send:</span>
+                                {editingTaskId !== task.id && <span className="text-[9px] opacity-70">Double-click to edit</span>}
+                              </span>
+                              {editingTaskId === task.id ? (
+                                <textarea
+                                  autoFocus
+                                  value={editingText}
+                                  onChange={(e) => setEditingText(e.target.value)}
+                                  onBlur={() => updateTaskMessage(task.id)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" && !e.shiftKey) {
+                                      e.preventDefault();
+                                      updateTaskMessage(task.id);
+                                    }
+                                    if (e.key === "Escape") setEditingTaskId(null);
+                                  }}
+                                  className="w-full min-h-[60px] p-2 bg-background border border-primary/30 focus:border-primary rounded text-[11px] font-mono resize-y outline-none"
+                                />
+                              ) : (
+                                <div 
+                                  onDoubleClick={() => { setEditingTaskId(task.id); setEditingText(task.message_text); }}
+                                  title="Double-click to edit message"
+                                  className="select-all text-foreground whitespace-pre-wrap cursor-text hover:bg-background/80 transition-colors p-1 -m-1 rounded"
+                                >
+                                  {task.message_text}
+                                </div>
+                              )}
                             </div>
                             
                             <div className="flex items-center gap-2">
@@ -644,8 +683,31 @@ const Actions = ({ userId }: { userId: string }) => {
                               <span className="block mb-1"><strong>Campaign:</strong> {campaigns.get(task.campaign_id)!.name}</span>
                             )}
                             {task.message_text && !isScrape && (
-                              <div className="mt-1.5 p-1.5 bg-background/50 rounded text-[11px] font-mono whitespace-pre-wrap">
-                                {task.message_text}
+                              <div className="mt-1.5">
+                                {editingTaskId === task.id ? (
+                                  <textarea
+                                    autoFocus
+                                    value={editingText}
+                                    onChange={(e) => setEditingText(e.target.value)}
+                                    onBlur={() => updateTaskMessage(task.id)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter" && !e.shiftKey) {
+                                        e.preventDefault();
+                                        updateTaskMessage(task.id);
+                                      }
+                                      if (e.key === "Escape") setEditingTaskId(null);
+                                    }}
+                                    className="w-full min-h-[60px] p-2 bg-background border border-primary/30 focus:border-primary rounded text-[11px] font-mono resize-y outline-none"
+                                  />
+                                ) : (
+                                  <div 
+                                    onDoubleClick={() => { setEditingTaskId(task.id); setEditingText(task.message_text); }}
+                                    title="Double-click to edit message before sending"
+                                    className="p-1.5 bg-background/50 rounded text-[11px] font-mono whitespace-pre-wrap cursor-text hover:bg-background/80 transition-colors"
+                                  >
+                                    {task.message_text}
+                                  </div>
+                                )}
                               </div>
                             )}
                           </>

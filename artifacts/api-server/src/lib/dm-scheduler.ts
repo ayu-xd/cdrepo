@@ -59,6 +59,20 @@ type Variant = {
   message_text: string;
 };
 
+function createShuffledQueue(variants: Variant[]): () => Variant {
+  let queue: Variant[] = [];
+  return () => {
+    if (queue.length === 0) {
+      queue = [...variants];
+      for (let i = queue.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [queue[i], queue[j]] = [queue[j], queue[i]];
+      }
+    }
+    return queue.pop()!;
+  };
+}
+
 // ── Per-user generator ────────────────────────────────────────────
 
 export async function generateDailyTasksForUser(
@@ -202,6 +216,14 @@ export async function generateDailyTasksForUser(
 
       const contactIds = campaignContactIds.get((campaign as any).id) || [];
 
+      const getFollowupVariant = followupSeq?.variants.length 
+        ? createShuffledQueue(followupSeq.variants) 
+        : null;
+
+      const getFirstMsgVariant = firstMsgSeq?.variants.length 
+        ? createShuffledQueue(firstMsgSeq.variants) 
+        : null;
+
       let followupSlots = 0;
       let newDmSlots = perCampaignQuota;
       if ((campaign as any).followup_enabled && followupSeq?.variants.length) {
@@ -226,7 +248,7 @@ export async function generateDailyTasksForUser(
           const key = `${cId}:${(browser as any).id}`;
           if (existingSet.has(key)) continue;
 
-          const variant = followupSeq.variants[Math.floor(Math.random() * followupSeq.variants.length)];
+          const variant = getFollowupVariant!();
           const preResolveFollowup = (campaign as any).pre_resolve_name !== false;
           tasksToInsert.push({
             user_id: userId,
@@ -259,7 +281,7 @@ export async function generateDailyTasksForUser(
         const key = `${cId}:${(browser as any).id}`;
         if (existingSet.has(key)) continue;
 
-        const variant = firstMsgSeq.variants[Math.floor(Math.random() * firstMsgSeq.variants.length)];
+        const variant = getFirstMsgVariant!();
         const preResolveNew = (campaign as any).pre_resolve_name !== false;
         tasksToInsert.push({
           user_id: userId,
@@ -281,6 +303,12 @@ export async function generateDailyTasksForUser(
   }
 
   if (tasksToInsert.length) {
+    // Interleave all variants and campaigns for organic, randomized listing
+    for (let i = tasksToInsert.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [tasksToInsert[i], tasksToInsert[j]] = [tasksToInsert[j], tasksToInsert[i]];
+    }
+
     const { error: insertErr } = await db.from("dm_tasks").insert(tasksToInsert);
     if (insertErr) throw insertErr;
   }

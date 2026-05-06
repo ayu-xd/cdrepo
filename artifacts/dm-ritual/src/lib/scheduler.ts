@@ -334,6 +334,16 @@ export async function generateDailyTasks(userId: string, dmLimit: number, follow
         }
       }
 
+      // Set up a round-robin queue for variants to ensure perfectly even distribution
+      let variantQueue: typeof firstMsgSeq.variants = [];
+      const getNextVariant = () => {
+        if (variantQueue.length === 0) {
+          // Refill and shuffle the queue
+          variantQueue = [...firstMsgSeq.variants].sort(() => Math.random() - 0.5);
+        }
+        return variantQueue.pop()!;
+      };
+
       // === New DM candidates ===
       let newCount = 0;
       for (const cId of contactIds) {
@@ -361,9 +371,7 @@ export async function generateDailyTasks(userId: string, dmLimit: number, follow
         const key = `${cId}:${browser.id}`;
         if (existingSet.has(key)) continue;
 
-        const variant = firstMsgSeq.variants[
-          Math.floor(Math.random() * firstMsgSeq.variants.length)
-        ];
+        const variant = getNextVariant();
         const resolved = applyVariables(variant.message_text, contact);
 
         tasksToInsert.push({
@@ -388,6 +396,13 @@ export async function generateDailyTasks(userId: string, dmLimit: number, follow
 
   // 9. Bulk insert tasks
   if (tasksToInsert.length) {
+    // Shuffle the entire task list so that variants and campaigns are completely interleaved.
+    // This breaks repeating patterns and makes the DM flow look highly organic to Instagram.
+    for (let i = tasksToInsert.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [tasksToInsert[i], tasksToInsert[j]] = [tasksToInsert[j], tasksToInsert[i]];
+    }
+
     const { error: insertErr } = await supabase
       .from("dm_tasks")
       .insert(tasksToInsert);
